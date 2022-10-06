@@ -1,2 +1,5 @@
 repeat_exp/baseline/roberta.large
 .*
+data
+models
+outputs
