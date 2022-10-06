@@ -11,7 +11,7 @@ if torch.cuda.is_available():
     roberta.cuda()
 roberta.eval()
 start_time = time.time()
-with open('/fsx/users/feisi/repos/data/GLUE-baselines/glue_data/MNLI/dev_matched.tsv') as fin:
+with open(path/to/MNLI/dev_matched) as fin:
     fin.readline()
     for index, line in enumerate(fin):
         tokens = line.strip().split('\t')
