@@ -1,4 +1,4 @@
-import torch
+import torch, time
 from tool import sum_memory
 from torch.profiler import profile, ProfilerActivity
 

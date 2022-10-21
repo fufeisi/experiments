@@ -1,14 +1,14 @@
 import torch
 from no_quantized import main
-from quantization import qLinear, qrelu
+from quantization import qConv2d_layer, qReLuLayer
 
 
 if __name__ == '__main__':
      res = []
      with open('quantized_log.txt', 'a') as f:
           f.write('quantized'+'\n')
-     for i in range(100):
-          best_acc, last_acc, training_time, run_epoch = main(i, LinearLayer=qLinear, act_fun=qrelu, early_stop=98)
+     for i in range(10):
+          best_acc, last_acc, training_time, run_epoch = main(i, Conv2dLayer=qConv2d_layer, act_fun=qReLuLayer)
           res.append([best_acc, last_acc, training_time, run_epoch])
           with open('quantized_log.txt', 'a') as f:
                f.write(str(res[-1])+'\n')

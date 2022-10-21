@@ -2,11 +2,11 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch, argparse, time
 from torchvision import datasets, transforms
-from models import FC
+from models import MLP
 from trainer import train, test
 
 
-def main(seed, matmul_op=None, act_fun=None, early_stop=100):
+def main(seed, LinearLayer=None, act_fun=None, early_stop=100):
      # Training settings
      parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
      parser.add_argument('--batch-size', type=int, default=100)
@@ -45,7 +45,7 @@ def main(seed, matmul_op=None, act_fun=None, early_stop=100):
      train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
      test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
-     model = FC([28*28, 512, 128, 10], matmul_op=matmul_op, act_fun=act_fun)
+     model = MLP([28*28, 512, 128, 10], LinearLayer=LinearLayer, act_fun=act_fun)
      optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
      test_acc = []

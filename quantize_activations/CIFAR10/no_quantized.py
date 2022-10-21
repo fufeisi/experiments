@@ -3,14 +3,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch, argparse, time
 from torchvision import datasets, transforms
 from trainer import train, test
-from models import vgg11
+from models import vgg16
 
 
-def main(seed, conv_op=None, act_fun=None, early_stop=100):
+def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
      # Training settings
      parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
      parser.add_argument('--batch-size', type=int, default=512)
-     parser.add_argument('--epochs', type=int, default=300)
+     parser.add_argument('--epochs', type=int, default=100)
      parser.add_argument('--lr', type=float, default=0.05)
      parser.add_argument('--momentum', default=0.9, type=float)
      parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float)
@@ -18,7 +18,7 @@ def main(seed, conv_op=None, act_fun=None, early_stop=100):
      parser.add_argument('--no-cuda', action='store_true', default=False,
                          help='disables CUDA training')
      parser.add_argument('--log_nums', type=int, default=10)
-     args = parser.parse_args([])
+     args = args or parser.parse_args([]) 
      use_cuda = not args.no_cuda and torch.cuda.is_available()
 
      torch.manual_seed(seed)
@@ -57,7 +57,7 @@ def main(seed, conv_op=None, act_fun=None, early_stop=100):
           ])),
           batch_size=args.batch_size, shuffle=False, pin_memory=True)
 
-     model = vgg11(conv_op=conv_op, act_fun=act_fun).to(device)
+     model = vgg16(Conv2dLayer=Conv2dLayer, act_fun=act_fun).to(device)
      optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                    momentum=args.momentum,
                                    weight_decay=args.weight_decay)
@@ -77,8 +77,8 @@ if __name__ == '__main__':
      res = []
      with open('no_quantized_log.txt', 'a') as f:
           f.write('no quantized'+'\n')
-     for i in range(100):
-          best_acc, last_acc, training_time, run_epoch = main(i, early_stop=98)
+     for i in range(10):
+          best_acc, last_acc, training_time, run_epoch = main(i)
           res.append([best_acc, last_acc, training_time, run_epoch])
           with open('no_quantized_log.txt', 'a') as f:
                f.write(str(res[-1])+'\n')
