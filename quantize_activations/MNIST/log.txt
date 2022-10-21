@@ -1,0 +1,17 @@
+baseline
+baseline
+[72.03, 72.03, 45.65]
+Peak Memory: 5.689344 MB
+baseline
+baseline
+baseline
+baseline
+baseline
+baseline
+baseline
+no quantized
+no quantized
+[93.97, 93.78, 44.73]
+Peak Memory: 11.022336 MB
+no quantized
+no quantized

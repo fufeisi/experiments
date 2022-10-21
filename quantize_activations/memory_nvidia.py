@@ -1,7 +1,7 @@
-import torch
 from torch.profiler import profile, ProfilerActivity
 from models import Model
 from quantize_activations.quantization import qmatmul
+import torch
 from tool import sum_memory
 
 device = 'cuda'
@@ -31,16 +31,11 @@ def main(has_sigmoid_functions, is_quantize):
      buffer_size = sum_memory(prof)
      print(f'Buffer Memory Usage:{buffer_size/1000**2} MB')
      print(f'Peak Memory: {torch.cuda.max_memory_allocated()/1000**2} MB')
+     print(f'Peak Memory: {torch.cuda.max_memory_allocated()/1000**2} MB')
      loss.backward()
      for w in model.weights:
           _ = w.grad[0][0]
 
 
 if __name__ == '__main__':
-     has_sigmoid_functions, is_quantize= 0, 0
-     while not (has_sigmoid_functions in ['yes', 'no'] and is_quantize in ['yes', 'no']):
-          has_sigmoid_functions = input('Do you want to include sigmoid functions in the network? yes or no ')
-          is_quantize = input('Do you want to quantize the activations? yes or no ')
-     has_sigmoid_functions = has_sigmoid_functions=='yes'
-     is_quantize = is_quantize=='yes'
-     main(has_sigmoid_functions, is_quantize)
+     main(False, True)
