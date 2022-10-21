@@ -9,6 +9,8 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(28 * 28, 512, bias=bias)
         self.fc2 = nn.Linear(512, 128, bias=bias)
         self.fc3 = nn.Linear(128, 10, bias=bias)
+        for layer in [self.fc1, self.fc2, self.fc3]:
+          layer.weight.data = torch.randn_like(layer.weight.data)
         self.dropout = nn.Dropout(p=.5)
 
     def forward(self, x):
@@ -71,9 +73,6 @@ def main(bias):
 
      model = Net(bias).to(device)
      optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-     print(f'Bias: {bias}. Length of parameters: {len(list(model.parameters()))}')
-     for w in model.parameters():
-          print(w.size())
 
      test_acc = []
      training_time = 0

@@ -1,5 +1,5 @@
 import torch
-from quantize_activations.MNIST.no_quantized import main
+from no_quantized import main
 from quantization import qmatmul, qrelu
 
 
@@ -7,8 +7,9 @@ if __name__ == '__main__':
      res = []
      with open('quantized_log.txt', 'a') as f:
           f.write('quantized'+'\n')
-     for i in range(10):
-          res.append(main(i, matmul_op=qmatmul, act_fun=qrelu))
+     for i in range(100):
+          best_acc, last_acc, training_time, run_epoch = main(i, matmul_op=qmatmul, act_fun=qrelu, early_stop=98)
+          res.append([best_acc, last_acc, training_time, run_epoch])
           with open('quantized_log.txt', 'a') as f:
                f.write(str(res[-1])+'\n')
                if i == 0:

@@ -1,5 +1,10 @@
 from turtle import forward
 import torch
+import math
+from torch.nn.parameter import Parameter
+from torch import Tensor
+from torch.nn import init
+
 class qMatMul(torch.autograd.Function):
   @staticmethod
   def forward(ctx, x, y):
@@ -47,11 +52,36 @@ def qrelu(x):
   return qReLu.apply(x)
 
 
-# class qLinear(torch.nn.Module):
-#   def __init__(self) -> None:
-#     super().__init__(i_dim, o_dim, bias=True, device='cuda', dtype=torch.float32)
-#     self.w = torch.nn.parameter.Parameter(torch.randn(i_dim, o_dim, dtype=dtype, device=device))
-#     self.b = torch.nn.parameter.Parameter(torch.randn(o_dim, dtype=dtype, device=device))
-#     self.weights = torch.nn.ParameterList([self.w, self.b])
-#   def forward(self, x):
-#     x = self.qmatmul(x, self.w) + self.b
+class qLinear(torch.nn.Module):
+  __constants__ = ['in_features', 'out_features']
+  in_features: int
+  out_features: int
+  weight: Tensor
+
+  def __init__(self, in_features: int, out_features: int, bias: bool = True,
+              device=None, dtype=None) -> None:
+    factory_kwargs = {'device': device, 'dtype': dtype}
+    super(qLinear, self).__init__()
+    self.in_features = in_features
+    self.out_features = out_features
+    self.weight = Parameter(torch.empty((out_features, in_features), **factory_kwargs))
+    if bias:
+        self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
+    else:
+        self.register_parameter('bias', None)
+    self.reset_parameters()
+
+  def reset_parameters(self) -> None:
+    init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+    if self.bias is not None:
+        fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        init.uniform_(self.bias, -bound, bound)
+
+  def forward(self, input: Tensor) -> Tensor:
+    return qmatmul(input, self.weight) + self.bias
+
+  def extra_repr(self) -> str:
+    return 'in_features={}, out_features={}, bias={}'.format(
+        self.in_features, self.out_features, self.bias is not None
+    )

@@ -2,24 +2,26 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch, argparse, time
 from torchvision import datasets, transforms
-from models import FC
 from trainer import train, test
+from models import vgg11
 
 
-def main(seed, matmul_op=None, act_fun=None, early_stop=100):
+def main(seed, conv_op=None, act_fun=None, early_stop=100):
      # Training settings
      parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-     parser.add_argument('--batch-size', type=int, default=100)
-     parser.add_argument('--epochs', type=int, default=20)
-     parser.add_argument('--lr', type=float, default=0.001)
-     parser.add_argument('--seed', type=int, default=seed)
+     parser.add_argument('--batch-size', type=int, default=512)
+     parser.add_argument('--epochs', type=int, default=300)
+     parser.add_argument('--lr', type=float, default=0.05)
+     parser.add_argument('--momentum', default=0.9, type=float)
+     parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float)
+     parser.add_argument('--seed', type=int, default=0)
      parser.add_argument('--no-cuda', action='store_true', default=False,
                          help='disables CUDA training')
      parser.add_argument('--log_nums', type=int, default=10)
      args = parser.parse_args([])
      use_cuda = not args.no_cuda and torch.cuda.is_available()
 
-     torch.manual_seed(args.seed)
+     torch.manual_seed(seed)
 
      if use_cuda:
           print('Running on cuda!!')
@@ -36,17 +38,29 @@ def main(seed, matmul_op=None, act_fun=None, early_stop=100):
           train_kwargs.update(cuda_kwargs)
           test_kwargs.update(cuda_kwargs)
 
-     # transform=transforms.Compose([
-     #      transforms.ToTensor(),
-     #      transforms.Normalize((0.1307,), (0.3081,))
-     #      ])
-     dataset1 = datasets.MNIST('../../data', train=True, transform=transforms.ToTensor())
-     dataset2 = datasets.MNIST('../../data', train=False, transform=transforms.ToTensor())
-     train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
-     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
+     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                        std=[0.229, 0.224, 0.225])
 
-     model = FC([28*28, 512, 128, 10], matmul_op=matmul_op, act_fun=act_fun)
-     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+     train_loader = torch.utils.data.DataLoader(
+          datasets.CIFAR10(root='../../data', train=True, transform=transforms.Compose([
+               transforms.RandomHorizontalFlip(),
+               transforms.RandomCrop(32, 4),
+               transforms.ToTensor(),
+               normalize,
+          ])),
+          batch_size=args.batch_size, shuffle=True, pin_memory=True)
+
+     test_loader = torch.utils.data.DataLoader(
+          datasets.CIFAR10(root='../../data', train=False, transform=transforms.Compose([
+               transforms.ToTensor(),
+               normalize,
+          ])),
+          batch_size=args.batch_size, shuffle=False, pin_memory=True)
+
+     model = vgg11(conv_op=conv_op, act_fun=act_fun).to(device)
+     optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                   momentum=args.momentum,
+                                   weight_decay=args.weight_decay)
 
      test_acc = []
      training_time = 0
@@ -61,18 +75,17 @@ def main(seed, matmul_op=None, act_fun=None, early_stop=100):
 
 if __name__ == '__main__':
      res = []
-     with open('log.txt', 'a') as f:
+     with open('no_quantized_log.txt', 'a') as f:
           f.write('no quantized'+'\n')
      for i in range(100):
           best_acc, last_acc, training_time, run_epoch = main(i, early_stop=98)
           res.append([best_acc, last_acc, training_time, run_epoch])
-          with open('log.txt', 'a') as f:
+          with open('no_quantized_log.txt', 'a') as f:
                f.write(str(res[-1])+'\n')
                if i == 0:
                     peak_memo = torch.cuda.max_memory_allocated()/1000**2
                     print(f'Peak Memory: {peak_memo} MB')
                     f.write(f'Peak Memory: {peak_memo} MB'+'\n')
      avg_res = [sum([res[i][j] for i in range(len(res))])/len(res) for j in range(4)]
-     with open('log.txt', 'a') as f:
+     with open('no_quantized_log.txt', 'a') as f:
           f.write('Avg result: ' + str(avg_res)+'\n')
-     

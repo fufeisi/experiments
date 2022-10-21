@@ -1,4 +1,6 @@
 import torch
+from tool import sum_memory
+from torch.profiler import profile, ProfilerActivity
 
 def train(args, model, device, train_loader, optimizer, epoch):
      model.train()
@@ -7,7 +9,13 @@ def train(args, model, device, train_loader, optimizer, epoch):
      for batch_idx, (data, target) in enumerate(train_loader):
           data, target = data.to(device), target.to(device)
           optimizer.zero_grad()
-          output = model(data)
+          if batch_idx == 0:
+               with profile(activities=[ProfilerActivity.CUDA], profile_memory=True, record_shapes=True) as prof:
+                    output = model(data)
+               buffer_size = sum_memory(prof)
+               print(f'Buffer Memory Usage:{buffer_size/1000**2} MB')
+          else:
+               output = model(data)
           loss = loss_fun(output, target)
           loss.backward()
           optimizer.step()
