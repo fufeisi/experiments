@@ -8,7 +8,7 @@ from models import vgg16
 def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
      # Training settings
      parser = argparse.ArgumentParser(description='CIFAR 10')
-     parser.add_argument('--batch-size', type=int, default=512)
+     parser.add_argument('--batch-size', type=int, default=1024)
      parser.add_argument('--epochs', type=int, default=100)
      parser.add_argument('--lr', type=float, default=0.05)
      parser.add_argument('--momentum', default=0.9, type=float)
@@ -17,7 +17,7 @@ def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
      parser.add_argument('--no-cuda', action='store_true', default=False,
                          help='disables CUDA training')
      parser.add_argument('--log_nums', type=int, default=10)
-     
+
      args = args or parser.parse_args([]) 
      use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -64,14 +64,17 @@ def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
 
      test_acc = []
      training_time = 0
+     res = [0, 0, 0, args.epochs]
      for epoch in range(1, args.epochs + 1):
           start_time = time.time()
           train(args, model, device, train_loader, optimizer, epoch)
           training_time += time.time()-start_time
           test_acc.append(test(model, device, test_loader))
-          if test_acc[-1] > early_stop:
-               return [max(test_acc), test_acc[-1], round(training_time, 2), epoch]
-     return [max(test_acc), test_acc[-1], round(training_time, 2), args.epochs]
+          if (res[-1] == args.epochs) and (test_acc[-1] > early_stop):
+               res[-1] = epoch
+               print('Reach early_stop!', res[-1])
+     res[:3] = max(test_acc), test_acc[-1], round(training_time, 2)
+     return res
 
 if __name__ == '__main__':
      res = []
