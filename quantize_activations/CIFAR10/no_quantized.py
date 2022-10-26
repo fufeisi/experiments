@@ -5,10 +5,9 @@ from torchvision import datasets, transforms
 from trainer import train, test
 from models import vgg16
 
-
 def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
      # Training settings
-     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+     parser = argparse.ArgumentParser(description='CIFAR 10')
      parser.add_argument('--batch-size', type=int, default=512)
      parser.add_argument('--epochs', type=int, default=100)
      parser.add_argument('--lr', type=float, default=0.05)
@@ -18,6 +17,7 @@ def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
      parser.add_argument('--no-cuda', action='store_true', default=False,
                          help='disables CUDA training')
      parser.add_argument('--log_nums', type=int, default=10)
+     
      args = args or parser.parse_args([]) 
      use_cuda = not args.no_cuda and torch.cuda.is_available()
 
