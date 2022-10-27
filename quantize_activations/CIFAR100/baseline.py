@@ -120,16 +120,17 @@ from trainer import train, test_topk
 
 def main(bias):
      # Training settings
-     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+     parser = argparse.ArgumentParser(description='CIFAR100')
      parser.add_argument('--batch-size', type=int, default=512)
-     parser.add_argument('--epochs', type=int, default=300)
-     parser.add_argument('--lr', type=float, default=0.05)
+     parser.add_argument('--epochs', type=int, default=200)
+     parser.add_argument('--lr', type=float, default=0.2)
      parser.add_argument('--momentum', default=0.9, type=float)
      parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float)
      parser.add_argument('--seed', type=int, default=0)
      parser.add_argument('--no-cuda', action='store_true', default=False,
                          help='disables CUDA training')
      parser.add_argument('--log_nums', type=int, default=10)
+     parser.add_argument('--milestones', default=[60, 120, 160])
      args = parser.parse_args([])
      use_cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -177,7 +178,7 @@ def main(bias):
      optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                    momentum=args.momentum,
                                    weight_decay=args.weight_decay)
-
+     train_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=0.2)
      test_acc = []
      training_time = 0
      for epoch in range(1, args.epochs + 1):
@@ -185,6 +186,7 @@ def main(bias):
           train(args, model, device, train_loader, optimizer, epoch)
           training_time += time.time()-start_time
           test_acc.append(test_topk(model, device, test_loader, [1, 5]))
+          train_scheduler.step()
 
 if __name__ == '__main__':
      main(True)
