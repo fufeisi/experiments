@@ -7,6 +7,10 @@ import math
 from torch.nn import init
 from torch import Tensor
 from torch.utils.cpp_extension import load
+from torch.ao.ns.fx.utils import compute_sqnr
+from torch.nn.modules.utils import _pair
+from torch.nn.common_types import _size_2_t
+from typing import Optional, List, Tuple, Union
 
 # load the PyTorch extension
 # cudnn_convolution = load(name="cudnn_convolution", sources=["/fsx/users/feisi/repos/experiments/quantize_activations/cudnn_convolution.cpp"], verbose=True)
@@ -137,9 +141,6 @@ class qConv2d(torch.autograd.Function):
 def qconv2d(x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, module=None):
   return qConv2d.apply(x, weight, bias, stride, padding, dilation, groups, module)
 
-from torch.nn.modules.utils import _pair
-from torch.nn.common_types import _size_2_t
-from typing import Optional, List, Tuple, Union
 class qConv2d_layer(torch.nn.Conv2d):
   def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
       if self.padding_mode != 'zeros':
@@ -165,7 +166,8 @@ class Conv2d_layer(torch.nn.Conv2d):
 class sConv2d(torch.autograd.Function):
   @staticmethod
   def forward(ctx, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, module=None):
-    ctx.save_for_backward(x, weight, bias)
+    ctx.save_for_backward(x, weight)
+    ctx.bias_sizes_opt = bias.shape[0]
     ctx.module = module
     ctx.stride = stride
 
@@ -177,15 +179,16 @@ class sConv2d(torch.autograd.Function):
 
   @staticmethod
   def backward(ctx, grad_output):
-    x, weight, bias = ctx.saved_tensors
+    x, weight = ctx.saved_tensors
+    bias_sizes_opt = ctx.bias_sizes_opt
     stride = ctx.stride
     padding = ctx.padding
     dilation = ctx.dilation
     groups = ctx.groups
-    grad_input = grad_weight = grad_bias = None
-    grad_input, grad_weight, grad_bias = torch.ops.aten.convolution_backward(grad_output, x, weight, _pair(bias.shape[0]),
-                                                _pair(stride), _pair(padding), _pair(dilation),
-                                                False, [0], groups, ctx.needs_input_grad[:3])
+    
+    grad_input, grad_weight, grad_bias = torch.ops.aten.convolution_backward(grad_output, x, weight, _pair(bias_sizes_opt),
+                                               _pair(stride), _pair(padding), _pair(dilation),
+                                               False, [0], groups, ctx.needs_input_grad[:3])
 
     return grad_input, grad_weight, grad_bias, None, None, None, None, None
 
