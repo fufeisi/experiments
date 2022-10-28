@@ -4,21 +4,24 @@ import torch, argparse, time
 from torchvision import datasets, transforms
 from trainer import train, test
 from models import vgg16
+# Training settings
+parser = argparse.ArgumentParser(description='CIFAR 10')
+parser.add_argument('--batch_size', type=int, default=128)
+parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--lr', type=float, default=0.0)
+parser.add_argument('--momentum', default=0.9, type=float)
+parser.add_argument('--weight_decay', '--wd', default=5e-4, type=float)
+parser.add_argument('--seed', type=int, default=0)
+parser.add_argument('--no_cuda', action='store_true', default=False,
+                    help='disables CUDA training')
+parser.add_argument('--log_nums', type=int, default=10)
+parser.add_argument('--milestones', default=[30*i for i in range(1, 4)])
+parser.add_argument('--times', type=int, default=5)
+args = parser.parse_args()
+if args.lr == 0.0:
+     args.lr = 0.05*(args.batch_size/512)**(1/2)
 
 def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
-     # Training settings
-     parser = argparse.ArgumentParser(description='CIFAR 10')
-     parser.add_argument('--batch-size', type=int, default=1024)
-     parser.add_argument('--epochs', type=int, default=100)
-     parser.add_argument('--lr', type=float, default=0.05)
-     parser.add_argument('--momentum', default=0.9, type=float)
-     parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float)
-     parser.add_argument('--seed', type=int, default=0)
-     parser.add_argument('--no-cuda', action='store_true', default=False,
-                         help='disables CUDA training')
-     parser.add_argument('--log_nums', type=int, default=10)
-
-     args = args or parser.parse_args([]) 
      use_cuda = not args.no_cuda and torch.cuda.is_available()
 
      torch.manual_seed(seed)
@@ -61,7 +64,7 @@ def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
      optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                    momentum=args.momentum,
                                    weight_decay=args.weight_decay)
-
+     train_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=0.5)
      test_acc = []
      training_time = 0
      res = [0, 0, 0, args.epochs]
@@ -73,6 +76,7 @@ def main(seed, Conv2dLayer=None, act_fun=None, early_stop=100, args=None):
           if (res[-1] == args.epochs) and (test_acc[-1] > early_stop):
                res[-1] = epoch
                print('Reach early_stop!', res[-1])
+          train_scheduler.step()
      res[:3] = max(test_acc), test_acc[-1], round(training_time, 2)
      return res
 
@@ -80,8 +84,8 @@ if __name__ == '__main__':
      res = []
      with open('no_quantized_log.txt', 'a') as f:
           f.write('no quantized'+'\n')
-     for i in range(10):
-          best_acc, last_acc, training_time, run_epoch = main(i)
+     for i in range(args.times):
+          best_acc, last_acc, training_time, run_epoch = main(i, args=args)
           res.append([best_acc, last_acc, training_time, run_epoch])
           with open('no_quantized_log.txt', 'a') as f:
                f.write(str(res[-1])+'\n')

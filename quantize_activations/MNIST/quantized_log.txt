@@ -307,3 +307,42 @@ Peak Memory: 11.034624 MB
 [98.07, 98.07, 31.07, 5]
 [98.19, 98.19, 49.61, 8]
 Avg result: [98.09950000000002, 98.09950000000002, 45.71419999999999, 6.82]
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+[98.25, 98.25, 84.35, 12]
+Peak Memory: 11.034624 MB
+quantized
+[98.25, 98.25, 83.63, 12]
+Peak Memory: 11.034624 MB
+[98.11, 98.11, 39.86, 6]
+Avg result: [98.18, 98.18, 61.745, 9.0]
+quantized
+[98.34, 98.34, 138.73, 20]
+Peak Memory: 11.034624 MB

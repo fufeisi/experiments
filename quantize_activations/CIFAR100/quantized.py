@@ -18,6 +18,7 @@ parser.add_argument('--no_cuda', action='store_true', default=False,
 parser.add_argument('--log_nums', type=int, default=10)
 parser.add_argument('--early_stop', default=[70, 90])
 parser.add_argument('--milestones', default=[60, 120, 160])
+parser.add_argument('--times', type=int, default=5)
 args = parser.parse_args() 
 if args.lr == 0.0:
      args.lr = 0.1*(args.batch_size/256)**(1/2)
@@ -26,7 +27,7 @@ if __name__ == '__main__':
      args_dict = vars(args)
      for item in args_dict:
           print(f'{item}: {args_dict[item]}')
-     for i in range(10):
+     for i in range(args.times):
           res.append(main(i, args=args, Conv2dLayer=qConv2d_layer, act_fun=qReLuLayer))
           if i == 0:
                peak_memo = torch.cuda.max_memory_allocated()/1000**2

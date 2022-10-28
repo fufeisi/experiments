@@ -1,5 +1,5 @@
 import torch, time
-from tool import sum_memory
+from tool import sum_memory, my_sqnr
 from torch.profiler import profile, ProfilerActivity
 
 def train(args, model, device, train_loader, optimizer, epoch):
@@ -19,6 +19,8 @@ def train(args, model, device, train_loader, optimizer, epoch):
           loss = loss_fun(output, target)
           loss.backward()
           optimizer.step()
+          # if args.sqnr:
+          #      my_sqnr.reset_layer()
           if batch_idx % (length//args.log_nums) == 0:
                print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
@@ -27,19 +29,33 @@ def train(args, model, device, train_loader, optimizer, epoch):
 
 def test(model, device, test_loader):
      model.eval()
-     test_loss = 0
      correct = 0
-     loss_fun = torch.nn.CrossEntropyLoss()
      with torch.no_grad():
           for data, target in test_loader:
                data, target = data.to(device), target.to(device)
                output = model(data)
-               test_loss += loss_fun(output, target).sum().item()  # sum up batch loss
                pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
                correct += pred.eq(target.view_as(pred)).sum().item()
-     test_loss /= len(test_loader.dataset)
-
-     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n'.format(
-          test_loss, correct, len(test_loader.dataset),
+     print('\nTest set: Accuracy: {}/{} ({:.2f}%)\n'.format(
+          correct, len(test_loader.dataset),
           100. * correct / len(test_loader.dataset)))
      return round(100. * correct / len(test_loader.dataset), 2)
+
+
+def test_topk(model, device, test_loader, topk=(1,)):
+     model.eval()
+     maxk = max(topk)
+     res = [0 for _ in topk]
+     with torch.no_grad():
+          for data, target in test_loader:
+               data, target = data.to(device), target.to(device)
+               output = model(data)
+               _, pred = output.topk(maxk, 1, True, True)
+               pred = pred.t()
+               correct = pred.eq(target.view(1, -1).expand_as(pred))
+               for i, k in enumerate(topk):
+                    res[i] += correct[:k].float().sum().item()
+     print('\nTest set: Accuracy: {}/{} ({}%)\n'.format(
+          res, len(test_loader.dataset),
+          [round(100. * item / len(test_loader.dataset), 2) for item in res]))
+     return [round(100. * item / len(test_loader.dataset), 2) for item in res]

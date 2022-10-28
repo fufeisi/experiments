@@ -18,6 +18,7 @@ parser.add_argument('--no_cuda', action='store_true', default=False,
 parser.add_argument('--log_nums', type=int, default=10)
 parser.add_argument('--early_stop', default=[70, 90])
 parser.add_argument('--milestones', default=[60, 120, 160])
+parser.add_argument('--times', type=int, default=5)
 args = parser.parse_args() 
 if args.lr == 0.0:
      args.lr = 0.1*(args.batch_size/256)**(1/2)
@@ -79,7 +80,7 @@ def main(seed, args, Conv2dLayer=None, act_fun=None):
           if (res[-2] == args.epochs) and (top1 > args.early_stop[0]):
                res[-2] = epoch
           train_scheduler.step()
-     res[:5] = max(test_acc[0]), max(test_acc[1]), test_acc[0][-1], test_acc[1][-1]. round(training_time, 2)
+     res[:5] = max(test_acc[0]), max(test_acc[1]), test_acc[0][-1], test_acc[1][-1], training_time
      return res
 
 if __name__ == '__main__':
@@ -87,13 +88,13 @@ if __name__ == '__main__':
      args_dict = vars(args)
      for item in args_dict:
           print(f'{item}: {args_dict[item]}')
-     for i in range(10):
+     for i in range(args.times):
           res.append(main(i, args))
           if i == 0:
                peak_memo = torch.cuda.max_memory_allocated()/1000**2
                print(f'Peak Memory: {peak_memo} MB')
-     avg_res = [sum([res[i][j] for i in range(len(res))])/len(res) for j in range(7)]
-     main_log('cifar100_log.txt', __file__)
+     avg_res = [round(sum([res[i][j] for i in range(len(res))])/len(res), 4) for j in range(7)]
+     main_log('cifar100_log.txt', '\n'+__file__)
      for item in args_dict:
           main_log('cifar100_log.txt', f'{item}: {args_dict[item]}')
      main_log('cifar100_log.txt', str(avg_res))

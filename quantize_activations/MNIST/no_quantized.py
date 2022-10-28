@@ -4,6 +4,7 @@ import torch, argparse, time
 from torchvision import datasets, transforms
 from models import MLP
 from trainer import train, test
+from tool import my_sqnr
 
 
 def main(seed, LinearLayer=None, act_fun=None, early_stop=100):
@@ -16,7 +17,9 @@ def main(seed, LinearLayer=None, act_fun=None, early_stop=100):
      parser.add_argument('--no-cuda', action='store_true', default=False,
                          help='disables CUDA training')
      parser.add_argument('--log_nums', type=int, default=10)
+     parser.add_argument('--sqnr', default=True)
      args = parser.parse_args([])
+
      use_cuda = not args.no_cuda and torch.cuda.is_available()
 
      torch.manual_seed(args.seed)
@@ -50,20 +53,24 @@ def main(seed, LinearLayer=None, act_fun=None, early_stop=100):
 
      test_acc = []
      training_time = 0
+     sqnr = []
      for epoch in range(1, args.epochs + 1):
           start_time = time.time()
           train(args, model, device, train_loader, optimizer, epoch)
           training_time += time.time()-start_time
           test_acc.append(test(model, device, test_loader))
-          if test_acc[-1] > early_stop:
-               return [max(test_acc), test_acc[-1], round(training_time, 2), epoch]
+          # if test_acc[-1] > early_stop:
+          #      return [max(test_acc), test_acc[-1], round(training_time, 2), epoch]
+          sqnr.append(my_sqnr.get_avg())
+          my_sqnr.reset()
+     print(sqnr)
      return [max(test_acc), test_acc[-1], round(training_time, 2), args.epochs]
 
 if __name__ == '__main__':
      res = []
      with open('log.txt', 'a') as f:
           f.write('no quantized'+'\n')
-     for i in range(100):
+     for i in range(3):
           best_acc, last_acc, training_time, run_epoch = main(i, early_stop=98)
           res.append([best_acc, last_acc, training_time, run_epoch])
           with open('log.txt', 'a') as f:

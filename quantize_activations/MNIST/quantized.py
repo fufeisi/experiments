@@ -7,7 +7,7 @@ if __name__ == '__main__':
      res = []
      with open('quantized_log.txt', 'a') as f:
           f.write('quantized'+'\n')
-     for i in range(100):
+     for i in range(2):
           best_acc, last_acc, training_time, run_epoch = main(i, LinearLayer=qLinear, act_fun=qrelu, early_stop=98)
           res.append([best_acc, last_acc, training_time, run_epoch])
           with open('quantized_log.txt', 'a') as f:

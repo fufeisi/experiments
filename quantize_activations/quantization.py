@@ -7,10 +7,11 @@ import math
 from torch.nn import init
 from torch import Tensor
 from torch.utils.cpp_extension import load
-from torch.ao.ns.fx.utils import compute_sqnr
 from torch.nn.modules.utils import _pair
 from torch.nn.common_types import _size_2_t
 from typing import Optional, List, Tuple, Union
+from tool import my_quantize, my_sqnr
+from torch.ao.ns.fx.utils import compute_sqnr
 
 # load the PyTorch extension
 # cudnn_convolution = load(name="cudnn_convolution", sources=["/fsx/users/feisi/repos/experiments/quantize_activations/cudnn_convolution.cpp"], verbose=True)
@@ -19,13 +20,10 @@ from typing import Optional, List, Tuple, Union
 class qMatMul(torch.autograd.Function):
   @staticmethod
   def forward(ctx, x, y):
-    # s = 3.0 / 255.0
-    # z = 0
-    s = (x.max() - x.min()) / 255.
-    z = (255 - x.max() / s).to(int)
-    qx = torch.quantize_per_tensor(x, s, z, torch.quint8)
-    # qy = torch.quantize_per_tensor(y, s, z, torch.quint8)
+    qx = torch.quantize_per_tensor_dynamic(x, torch.quint8, False)
     ctx.save_for_backward(qx, y)
+    my_sqnr.save(compute_sqnr(x, qx.dequantize()).item())
+    # print(len(my_sqnr.sqnr), len(my_sqnr.sqnr[0]))
     with torch.no_grad():
       out = torch.mm(x, y)  # (m, k) x (k, n)
     return out  # (m, n)
@@ -46,9 +44,7 @@ class qReLu(torch.autograd.Function):
   @staticmethod
   def forward(ctx, x):
     out = torch.relu(x)
-    s = (out.max() - out.min()) / 255.
-    z = 0
-    qout = torch.quantize_per_tensor(out, s, z, torch.quint8)
+    qout = torch.quantize_per_tensor_dynamic(out, torch.quint8, False)
     ctx.save_for_backward(qout)
     return out
   
@@ -106,8 +102,8 @@ class qReLuLayer(torch.nn.Module):
 class qConv2d(torch.autograd.Function):
   @staticmethod
   def forward(ctx, x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, module=None):
-    qx = torch.quantize_per_tensor_dynamic(x,torch.quint8, False)
-    qweight = torch.quantize_per_tensor_dynamic(weight,torch.quint8, False)
+    qx = torch.quantize_per_tensor_dynamic(x, torch.quint8, False)
+    qweight = torch.quantize_per_tensor_dynamic(weight, torch.quint8, False)
     ctx.bias_sizes_opt = bias.shape[0]
     ctx.save_for_backward(qx, qweight)
     ctx.module = module
