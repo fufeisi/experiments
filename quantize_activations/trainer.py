@@ -1,17 +1,20 @@
 import torch, time
-from tool import sum_memory, my_sqnr
+from tool import sum_memory, my_sqnr, my_quantize
 from torch.profiler import profile, ProfilerActivity
 
 def train(args, model, device, train_loader, optimizer, epoch):
      model.train()
+     my_sqnr.freeze = False
      loss_fun = torch.nn.CrossEntropyLoss()
      length = len(train_loader)
      for batch_idx, (data, target) in enumerate(train_loader):
           data, target = data.to(device), target.to(device)
           optimizer.zero_grad()
+          my_quantize.reset()
           if batch_idx == 0:
                with profile(activities=[ProfilerActivity.CUDA], profile_memory=True, record_shapes=True) as prof:
                     output = model(data)
+                    my_quantize.reset()
                buffer_size = sum_memory(prof)
                print(f'Buffer Memory Usage:{buffer_size/1000**2} MB')
           else:
@@ -19,12 +22,13 @@ def train(args, model, device, train_loader, optimizer, epoch):
           loss = loss_fun(output, target)
           loss.backward()
           optimizer.step()
-          # if args.sqnr:
-          #      my_sqnr.reset_layer()
+          if args.sqnr:
+               my_sqnr.reset_layer()
           if batch_idx % (length//args.log_nums) == 0:
                print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
                     100. * batch_idx / len(train_loader), loss.item()))
+     my_sqnr.freeze = True
 
 
 def test(model, device, test_loader):

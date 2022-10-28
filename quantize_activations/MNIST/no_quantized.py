@@ -61,9 +61,9 @@ def main(seed, LinearLayer=None, act_fun=None, early_stop=100):
           test_acc.append(test(model, device, test_loader))
           # if test_acc[-1] > early_stop:
           #      return [max(test_acc), test_acc[-1], round(training_time, 2), epoch]
-          sqnr.append(my_sqnr.get_avg())
-          my_sqnr.reset()
-     print(sqnr)
+     #      sqnr.append(my_sqnr.get_avg())
+     #      my_sqnr.reset()
+     # print(sqnr)
      return [max(test_acc), test_acc[-1], round(training_time, 2), args.epochs]
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 import torch
 from no_quantized import main
-from quantization import qLinear, qrelu
+from quant_layer import qLinear, qrelu
 
 
 if __name__ == '__main__':

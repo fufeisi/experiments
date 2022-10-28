@@ -346,3 +346,18 @@ Avg result: [98.18, 98.18, 61.745, 9.0]
 quantized
 [98.34, 98.34, 138.73, 20]
 Peak Memory: 11.034624 MB
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+quantized
+[98.34, 98.34, 134.32, 20]
+Peak Memory: 11.177472 MB
+quantized
+quantized
+quantized
+[98.34, 98.34, 206.29, 20]
+Peak Memory: 11.177472 MB

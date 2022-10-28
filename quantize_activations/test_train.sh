@@ -1,0 +1,1 @@
+python training.py --epochs 2 --times 2 --sqnr True --batch_size 512
