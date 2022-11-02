@@ -37,16 +37,23 @@ def main(seed, args):
           device = torch.device("cpu")
      
      train_loader, test_loader = load_data(args)
-     model = load_model(args).to(device)
+     if torch.cuda.device_count() >= 1:
+          print("Let's use", torch.cuda.device_count(), "GPUs!")
+          model = torch.nn.DataParallel(load_model(args)).cuda()
+     else:
+          model = load_model(args)
      optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                   momentum=args.momentum,
-                                   weight_decay=args.weight_decay)
+                    momentum=args.momentum,
+                    weight_decay=args.weight_decay)
      if len(args.milestones) > 0:
           train_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=0.5)
      test_acc = [[], []]
      training_time = 0
      res = [0, 0, 0, 0, 0, args.epochs, args.epochs]
-     for epoch in range(1, args.epochs + 1):
+     epoch = 1
+     max_init = 5
+     init_time = 0
+     while epoch < args.epochs + 1:
           start_time = time.time()
           train(args, model, device, train_loader, optimizer, epoch)
           training_time += time.time()-start_time
@@ -59,8 +66,29 @@ def main(seed, args):
                res[-2] = epoch
           if len(args.milestones) > 0:
                train_scheduler.step()
+          epoch += 1
+          if epoch in [10, 15, 20, 25, 30]:
+               m = sum(test_acc[0])/len(test_acc[0])
+               print(sum([(item - m)**2 for item in test_acc[0][epoch-5:epoch]]))
+               if sum([(item - m)**2 for item in test_acc[0][epoch-5:epoch]]) <= 1:
+                    if init_time > max_init:
+                         exit('Reach max initial time!')
+                    init_time += 1
+                    model = load_model(args).to(device)
+                    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                   momentum=args.momentum,
+                                   weight_decay=args.weight_decay)
+                    if len(args.milestones) > 0:
+                         train_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=0.5)
+                    test_acc = [[], []]
+                    training_time = 0
+                    res = [0, 0, 0, 0, 0, args.epochs, args.epochs]
+                    epoch = 1
      res[:5] = max(test_acc[0]), max(test_acc[1]), test_acc[0][-1], test_acc[1][-1], training_time
-     return res + my_sqnr.get_avg() if args.sqnr else res
+     if args.sqnr:
+          res = res + my_sqnr.get_avg()
+     print(res)
+     return res
 
 if __name__ == '__main__':
      res = []

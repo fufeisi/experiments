@@ -7,6 +7,7 @@ def train(args, model, device, train_loader, optimizer, epoch):
      my_sqnr.freeze = False
      loss_fun = torch.nn.CrossEntropyLoss()
      length = len(train_loader)
+     start_time = time.time()
      for batch_idx, (data, target) in enumerate(train_loader):
           data, target = data.to(device), target.to(device)
           optimizer.zero_grad()
@@ -25,9 +26,10 @@ def train(args, model, device, train_loader, optimizer, epoch):
           if args.sqnr:
                my_sqnr.reset_layer()
           if batch_idx % (length//args.log_nums) == 0:
-               print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}'.format(
+               print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}. Time:{:.2f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
-                    100. * batch_idx / len(train_loader), loss.item()))
+                    100. * batch_idx / length, loss.item(), time.time()-start_time))
+               start_time = time.time()
      my_sqnr.freeze = True
 
 
