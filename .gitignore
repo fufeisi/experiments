@@ -6,3 +6,6 @@ __pycache__
 *.txt
 *.pt
 *.out
+*.pt
+*.tar
+*log

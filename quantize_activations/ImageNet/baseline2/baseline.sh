@@ -7,4 +7,4 @@
 #SBATCH --cpus-per-gpu=8
 #SBATCH --partition=train
 
-srun python main.py --dist-url 'tcp://127.0.0.1:8325' --dist-backend 'nccl' --multiprocessing-distributed --world-size 1 --rank 0
+srun python main.py --world-size 8 --rank 0 --workers 64 --batch-size 1024*2

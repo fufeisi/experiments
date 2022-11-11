@@ -9,7 +9,8 @@ def train(args, model, device, train_loader, optimizer, epoch):
      length = len(train_loader)
      start_time = time.time()
      for batch_idx, (data, target) in enumerate(train_loader):
-          data, target = data.to(device), target.to(device)
+          if not (args.ffcv and args.data_name == 'IMAGENET'):
+               data, target = data.to(device), target.to(device)
           optimizer.zero_grad()
           my_quantize.reset()
           if batch_idx == 0:
@@ -20,16 +21,16 @@ def train(args, model, device, train_loader, optimizer, epoch):
                print(f'Buffer Memory Usage:{buffer_size/1000**2} MB')
           else:
                output = model(data)
-          loss = loss_fun(output, target)
+          # import pdb; pdb.set_trace()
+          loss = loss_fun(output, target.view(-1))
           loss.backward()
           optimizer.step()
           if args.sqnr:
                my_sqnr.reset_layer()
-          if batch_idx % (length//args.log_nums) == 0:
-               print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}. Time:{:.2f}'.format(
-                    epoch, batch_idx * len(data), len(train_loader.dataset),
+          if batch_idx % (length//args.log_nums) == 0 and args.local_rank == 0:
+               print('Train Epoch: {} [{}/{} ({:.2f}%)]\tLoss: {:.6f}. Epoch time:{:.2f}'.format(
+                    epoch, batch_idx * len(data), len(train_loader)*args.batch_size,
                     100. * batch_idx / length, loss.item(), time.time()-start_time))
-               start_time = time.time()
      my_sqnr.freeze = True
 
 
@@ -52,8 +53,10 @@ def test_topk(model, device, test_loader, topk=(1,)):
      model.eval()
      maxk = max(topk)
      res = [0 for _ in topk]
+     l = 0
      with torch.no_grad():
           for data, target in test_loader:
+               l += len(data)
                data, target = data.to(device), target.to(device)
                output = model(data)
                _, pred = output.topk(maxk, 1, True, True)
@@ -61,7 +64,4 @@ def test_topk(model, device, test_loader, topk=(1,)):
                correct = pred.eq(target.view(1, -1).expand_as(pred))
                for i, k in enumerate(topk):
                     res[i] += correct[:k].float().sum().item()
-     print('\nTest set: Accuracy: {}/{} ({}%)\n'.format(
-          res, len(test_loader.dataset),
-          [round(100. * item / len(test_loader.dataset), 2) for item in res]))
-     return [round(100. * item / len(test_loader.dataset), 2) for item in res]
+     return [round(100. * item / l, 2) for item in res]

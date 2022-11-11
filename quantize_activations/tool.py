@@ -1,5 +1,6 @@
 from cmath import inf
-import torch
+import torch, os
+import torch.distributed as dist
 
 def sum_memory(prof):
      res = 0
@@ -8,6 +9,15 @@ def sum_memory(prof):
                res +=item.self_cuda_memory_usage
      return res
 
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+
+    # initialize the process group
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+
+def cleanup():
+    dist.destroy_process_group()
 
 def main_log(file_name, content):
      with open(file_name, 'a') as f:
@@ -20,6 +30,7 @@ class QuantizeBuffer:
           if x not in self.buffer_dict:
                if len(self.buffer_dict) >= 1:
                     self.reset()
+               # print('^'*100, x.dtype)
                self.buffer_dict[x] = torch.quantize_per_tensor_dynamic(x, torch.quint8, False)
           return self.buffer_dict[x]
      def reset(self):

@@ -6,8 +6,8 @@ from torch.nn.modules.utils import _pair
 from quantization import qMatMul, qReLu, qConv2d, nqConv2d
 
 
-def qmatmul(x, y):
-  return qMatMul.apply(x, y)
+def qlinear(x, y, z):
+  return qMatMul.apply(x, y, z)
 
 def qrelu(x):
   return qReLu.apply(x)
@@ -20,7 +20,7 @@ def nqconv2d(x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, mo
 
 class qLinear(torch.nn.Linear):
   def forward(self, input: Tensor) -> Tensor:
-      return qmatmul(input, self.weight.transpose(0, 1)) + self.bias
+      return qlinear(input, self.weight, self.bias)
 
 class qReLuLayer(torch.nn.Module):
   def forward(self, input: Tensor) -> Tensor:
