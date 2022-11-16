@@ -22,8 +22,10 @@ import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 
-from quantize_activations.tool import sum_memory, my_quantize
+from quantize_activations.tool import sum_memory
+import quantize_activations.tool as tl
 from torch.profiler import profile, ProfilerActivity
+from quantize_activations.test_grad import grad_diff
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -84,6 +86,7 @@ parser.add_argument('--dummy', action='store_true', help="use fake data to bench
 parser.add_argument('--ffcv', default=0)
 parser.add_argument('--quan', default=0)
 parser.add_argument('--log_file', default='main_log.txt')
+parser.add_argument('--bnb', default=0)
 
 best_acc1 = 0
 
@@ -216,13 +219,21 @@ def main_worker(gpu, ngpus_per_node, args):
         device = torch.device("cpu")
     # define loss function (criterion), optimizer, and learning rate scheduler
     criterion = nn.CrossEntropyLoss().to(device)
-
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
-    
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+    if args.bnb:
+        import bitsandbytes as bnb
+        print('-'*30+'Using bnb!!!~~')
+        optimizer = bnb.optim.SGD(model.parameters(), args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay)
+        """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+        scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+    else:
+        optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay)
+        
+        """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+        scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
     
     # optionally resume from a checkpoint
     if args.resume:
@@ -339,11 +350,18 @@ def main_worker(gpu, ngpus_per_node, args):
         from quantize_activations.tool import main_log
         args_dict = vars(args)
         for item in args_dict:
-            main_log(args.log_file, str(args_dict[item]))
+            main_log(args.log_file, f'{item}: {args_dict[item]};')
         main_log(args.log_file, f'top 1: {res[0][-1]}')
         main_log(args.log_file, f'top 5: {res[1][-1]}')
         main_log(args.log_file, f'top 1 best: {max(res[0])}')
         main_log(args.log_file, f'top 5 best: {max(res[1])}')
+        def first_epoch(arr, acc):
+            for i, x in enumerate(arr):
+                if x > acc:
+                    return i + 1
+            return len(arr)
+        main_log(args.log_file, f'first 68%(top1): {first_epoch(res[0], 68)}')
+        main_log(args.log_file, f'first 88%(top5): {first_epoch(res[1], 88)}')
         main_log(args.log_file, f'buffer size: {buffer_size} MB')
         main_log(args.log_file, f'peak momemry: {peak_mome} MB')
         main_log(args.log_file, f'Total Training time: {train_time}s')
@@ -361,10 +379,10 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
 
     # switch to train mode
     model.train()
-
     end = time.time()
     start_time = time.time()
     for i, (images, target) in enumerate(train_loader):
+        tl.my_quantize.start_train()
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -373,26 +391,27 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
             images = images.to(device, non_blocking=True)
             target = target.to(device, non_blocking=True)
         optimizer.zero_grad()
-        my_quantize.reset()
         # compute output
         if i == 0:
+            diff = grad_diff(model, criterion, images, target)
+            tl.my_quantize.start_count()
             with profile(activities=[ProfilerActivity.CUDA], profile_memory=True, record_shapes=True) as prof:
                 output = model(images)
-                my_quantize.reset()
             buffer_size = sum_memory(prof)
             if args.rank == 0:
-                print(f'Buffer Memory Usage:{buffer_size/1000**2} MB')
+                print(f'Gradient SQNR {diff}.')
+                print(f'Buffer Memory Usage:{buffer_size/1000**2} MB.')
+                tl.my_quantize.report()
+                tl.my_quantize.stop_count()
         else:
             output = model(images)
+        tl.my_quantize.stop_train()
         loss = criterion(output, target)
-        
-        jump_time = time.time()
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
-        start_time += time.time() - jump_time
 
         # compute gradient and do SGD step
         loss.backward()
