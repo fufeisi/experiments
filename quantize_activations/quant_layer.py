@@ -3,7 +3,7 @@ from torch import Tensor
 import torch.nn.functional as F
 from typing import Optional
 from torch.nn.modules.utils import _pair
-from quantization import qMatMul, qReLu, qConv2d, nqConv2d
+from quantize_activations.quantization import qMatMul, qReLu, qConv2d, nqConv2d
 
 
 def qlinear(x, y, z):

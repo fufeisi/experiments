@@ -1,6 +1,24 @@
 from cmath import inf
-import torch, os
-import torch.distributed as dist
+import torch, time
+from torch.ao.ns.fx.utils import compute_sqnr
+
+class QuanNames(object):
+     def __init__(self) -> None:
+          self.used = 0
+          self.l = 32
+          self.names = [self.l-i for i in range(self.l)]
+          self.print = 1
+     def reset(self):
+          self.used = 0
+          self.names = [self.l-i for i in range(self.l)]
+     def extend(self):
+          self.l = 2*self.l
+          self.names = [self.l-i for i in range(self.l//2)]
+     def get(self):
+          self.used += 1
+          if self.used > self.l:
+               self.extend()
+          return self.names.pop()
 
 def sum_memory(prof):
      res = 0
@@ -9,15 +27,11 @@ def sum_memory(prof):
                res +=item.self_cuda_memory_usage
      return res
 
-def setup(rank, world_size):
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-
-    # initialize the process group
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
-
-def cleanup():
-    dist.destroy_process_group()
+def tensor_size(x):
+     res = 1
+     for i in x.shape:
+          res *= i
+     return res
 
 def main_log(file_name, content):
      with open(file_name, 'a') as f:
@@ -26,52 +40,47 @@ def main_log(file_name, content):
 class QuantizeBuffer:
      def __init__(self):
           self.buffer_dict = {}
+          self.is_count = False
+          self.count = 0
+          self.names = QuanNames()
+          self.train = True
+          self.sqnr = {}
+          self.count_time = 0
      def forward(self, x):
-          if x not in self.buffer_dict:
-               if len(self.buffer_dict) >= 1:
-                    self.reset()
-               # print('^'*100, x.dtype)
-               self.buffer_dict[x] = torch.quantize_per_tensor_dynamic(x, torch.quint8, False)
-          return self.buffer_dict[x]
-     def reset(self):
+          if 'quan_name' not in dir(x):
+               x.quan_name = self.names.get()
+               self.buffer_dict[x.quan_name] = torch.quantize_per_tensor_dynamic(x, torch.quint8, False)
+               if self.is_count:
+                    start_time = time.time()
+                    self.count += tensor_size(x)
+                    self.sqnr[x.quan_name] = compute_sqnr(x, self.buffer_dict[x.quan_name].dequantize()).item()
+                    self.count_time = time.time() - start_time
+          return self.buffer_dict[x.quan_name]
+     def start_train(self):
+          self.train = True
           self.buffer_dict = {}
+          self.names.reset()
           torch.cuda.empty_cache()
+     def stop_train(self):
+          self.train = False
+          self.buffer_dict = {}
+          self.names.reset()
+          torch.cuda.empty_cache()
+     def reset_memory(self):
+          self.buffer_dict = {}
+          self.names.reset()
+          torch.cuda.empty_cache()
+     def start_count(self):
+          self.sqnr = {}
+          self.count = 0
+          self.is_count = True
+          self.count_time = 0
+     def stop_count(self):
+          self.sqnr = {}
+          self.count = 0
+          self.is_count = False
+     def report(self):
+          print(f'Count time: {self.count_time}; Total tensor we quantized {self.count/(250*1000)} MB; SQNR: {self.sqnr};')
 
 my_quantize = QuantizeBuffer()
 
-class StoreSQNR:
-     def __init__(self):
-          self.sqnr = []
-          self.layer = 0
-          self.total_layers = 0
-          self.freeze = False
-     def save(self, x):
-          if self.freeze:
-               return 
-          if self.layer == self.total_layers:
-               self.total_layers += 1
-               self.sqnr.append([])
-          self.sqnr[self.layer].append(x)
-          self.layer += 1
-     def reset_layer(self):
-          self.layer = 0
-     def get(self):
-          return self.sqnr
-     def get_avg(self):
-          return [sum(item)/len(item) for item in self.sqnr]
-
-# class StoreSQNR:
-#      def __init__(self):
-#           self.sqnr = []
-#      def reset(self):
-#           self.sqnr = []
-#      def save(self, x):
-#           if x < inf:
-#                self.sqnr.append(x)
-#      def get_avg(self):
-#           mean = sum(self.sqnr) / len(self.sqnr)
-#           variance = sum([((x - mean) ** 2) for x in self.sqnr]) / len(self.sqnr)
-#           std = variance ** 0.5
-#           return mean, std
-
-my_sqnr = StoreSQNR()
