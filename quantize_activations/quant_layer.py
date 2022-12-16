@@ -3,7 +3,7 @@ from torch import Tensor
 import torch.nn.functional as F
 from typing import Optional
 from torch.nn.modules.utils import _pair
-from quantize_activations.quantization import qMatMul, qReLu, qConv2d, nqConv2d
+from quantize_activations.quantization import qMatMul, qReLu, qConv2d, nqConv2d, qMaxPool2d, qBatchNorm2d
 
 
 def qlinear(x, y, z):
@@ -17,6 +17,9 @@ def qconv2d(x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, mod
 
 def nqconv2d(x, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, module=None):
   return nqConv2d.apply(x, weight, bias, stride, padding, dilation, groups, module)
+
+def qbatch_norm2d(x):
+  return qBatchNorm2d.apply(x)
 
 class qLinear(torch.nn.Linear):
   def forward(self, input: Tensor) -> Tensor:
@@ -48,3 +51,6 @@ class Conv2d_layer(torch.nn.Conv2d):
   def forward(self, input: Tensor) -> Tensor:
     return self._conv_forward(input, self.weight, self.bias)
 
+class qBatchNorm2dLayer(torch.nn.BatchNorm2d):
+  def forward(self, input: Tensor) -> Tensor:
+     return qbatch_norm2d(input)

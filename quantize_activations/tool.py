@@ -5,7 +5,7 @@ from torch.ao.ns.fx.utils import compute_sqnr
 class QuanNames(object):
      def __init__(self) -> None:
           self.used = 0
-          self.l = 32
+          self.l = 1024
           self.names = [self.l-i for i in range(self.l)]
           self.print = 1
      def reset(self):
@@ -60,16 +60,13 @@ class QuantizeBuffer:
           self.train = True
           self.buffer_dict = {}
           self.names.reset()
-          torch.cuda.empty_cache()
      def stop_train(self):
           self.train = False
           self.buffer_dict = {}
           self.names.reset()
-          torch.cuda.empty_cache()
      def reset_memory(self):
           self.buffer_dict = {}
           self.names.reset()
-          torch.cuda.empty_cache()
      def start_count(self):
           self.sqnr = {}
           self.count = 0

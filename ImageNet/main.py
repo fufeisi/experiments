@@ -26,6 +26,7 @@ from quantize_activations.tool import sum_memory
 import quantize_activations.tool as tl
 from torch.profiler import profile, ProfilerActivity
 from quantize_activations.test_grad import grad_diff
+from gpu_usage import PrintGPU
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -349,6 +350,7 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.rank == 0:
         from quantize_activations.tool import main_log
         args_dict = vars(args)
+        main_log(args.log_file, '-'*50)
         for item in args_dict:
             main_log(args.log_file, f'{item}: {args_dict[item]};')
         main_log(args.log_file, f'top 1: {res[0][-1]}')
@@ -393,13 +395,15 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         optimizer.zero_grad()
         # compute output
         if i == 0:
-            diff = grad_diff(model, criterion, images, target)
+            # diff = grad_diff(model, criterion, images, target)
             tl.my_quantize.start_count()
             with profile(activities=[ProfilerActivity.CUDA], profile_memory=True, record_shapes=True) as prof:
                 output = model(images)
             buffer_size = sum_memory(prof)
             if args.rank == 0:
-                print(f'Gradient SQNR {diff}.')
+                gpu_meter = PrintGPU()
+                gpu_meter.print_gpu(5)
+                # print(f'Gradient SQNR {diff}.')
                 print(f'Buffer Memory Usage:{buffer_size/1000**2} MB.')
                 tl.my_quantize.report()
                 tl.my_quantize.stop_count()
@@ -427,6 +431,8 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
     peak_memo = torch.cuda.max_memory_allocated()/1000**2
     if args.rank == 0:
         print(f'Peak Memory: {peak_memo} MB')
+        gpu_meter.report()
+        gpu_meter.cancel()
     return time.time()-start_time, buffer_size, peak_memo
 
 

@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -44,7 +45,9 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.models.roberta.configuration_roberta import RobertaConfig
-from quantize_activations.quant_layer import qLinear
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from quant_layer import qLinear
 
 
 logger = logging.get_logger(__name__)
@@ -83,9 +86,12 @@ class RobertaEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        if version.parse(torch.__version__) > version.parse("1.6.0"):
+            self.register_buffer(
+                "token_type_ids",
+                torch.zeros(self.position_ids.size(), dtype=torch.long),
+                persistent=False,
+            )
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -165,9 +171,9 @@ class RobertaSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = qLinear(config.hidden_size, self.all_head_size)
-        self.key = qLinear(config.hidden_size, self.all_head_size)
-        self.value = qLinear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(
@@ -221,7 +227,6 @@ class RobertaSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        use_cache = past_key_value is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -236,16 +241,10 @@ class RobertaSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
-            if use_cache:
-                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
-                    -1, 1
-                )
-            else:
-                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            seq_length = hidden_states.size()[1]
+            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
-
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
@@ -290,7 +289,7 @@ class RobertaSelfAttention(nn.Module):
 class RobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = qLinear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -355,7 +354,7 @@ class RobertaAttention(nn.Module):
 class RobertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = qLinear(config.hidden_size, config.intermediate_size)
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -371,7 +370,7 @@ class RobertaIntermediate(nn.Module):
 class RobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = qLinear(config.intermediate_size, config.hidden_size)
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -430,8 +429,7 @@ class RobertaLayer(nn.Module):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
-                    " by setting `config.add_cross_attention=True`"
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -571,7 +569,7 @@ class RobertaEncoder(nn.Module):
 class RobertaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = qLinear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -592,12 +590,11 @@ class RobertaPreTrainedModel(PreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, qLinear) or isinstance(module, nn.Linear):
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -658,12 +655,11 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
-            This parameter can only be used when the model is initialized with `type_vocab_size` parameter with value
-            >= 2. All the value in this tensor should be always < type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
@@ -1136,10 +1132,10 @@ class RobertaLMHead(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.dense = qLinear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.decoder = qLinear(config.hidden_size, config.vocab_size)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         self.decoder.bias = self.bias
 
@@ -1155,11 +1151,7 @@ class RobertaLMHead(nn.Module):
 
     def _tie_weights(self):
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            self.bias = self.decoder.bias
+        self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
@@ -1169,7 +1161,7 @@ class RobertaLMHead(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
-class qRobertaForSequenceClassification(RobertaPreTrainedModel):
+class RobertaForSequenceClassification(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
@@ -1277,7 +1269,7 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
 
         self.roberta = RobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = qLinear(config.hidden_size, 1)
+        self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1375,7 +1367,7 @@ class RobertaForTokenClassification(RobertaPreTrainedModel):
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = qLinear(config.hidden_size, config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1447,12 +1439,12 @@ class RobertaClassificationHead(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.dense = qLinear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.out_proj = qLinear(config.hidden_size, config.num_labels)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, features, **kwargs):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
@@ -1480,7 +1472,7 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.roberta = RobertaModel(config, add_pooling_layer=False)
-        self.qa_outputs = qLinear(config.hidden_size, config.num_labels)
+        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -19,15 +19,14 @@ def grad_diff(model, criterion, x, target):
      return sqnr
 
 
-def grad_diff_roberta(model, inputs):
+def grad_diff_roberta(model, func, inputs):
      temp = qt.quan
+     import copy
      res = [] # res[0] is nonquan, res[1] is quan. 
      for is_quan in [False, True]:
           qt.quan = is_quan
           res.append([])
-          outputs = model(**inputs)
-          loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
-          loss = loss.mean()
+          loss = func(model, copy.deepcopy(inputs)).mean()
           loss.backward()
           for weight in model.parameters():
                res[-1].append(weight.grad.clone().detach())

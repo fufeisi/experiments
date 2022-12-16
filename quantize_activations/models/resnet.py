@@ -11,7 +11,7 @@ from torchvision.models._meta import _IMAGENET_CATEGORIES
 from torchvision.models._utils import _ovewrite_named_param
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from quant_layer import qConv2d_layer, qReLuLayer, qLinear
+from quant_layer import qConv2d_layer, qReLuLayer, qLinear, qBatchNorm2dLayer
 
 __all__ = [
     "ResNet",
@@ -73,7 +73,7 @@ class BasicBlock(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = torch.nn.BatchNorm2d
         if groups != 1 or base_width != 64:
             raise ValueError("BasicBlock only supports groups=1 and base_width=64")
         if dilation > 1:
@@ -128,7 +128,7 @@ class Bottleneck(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = torch.nn.BatchNorm2d
         width = int(planes * (base_width / 64.0)) * groups
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width)
@@ -179,7 +179,7 @@ class ResNet(nn.Module):
         super().__init__()
         _log_api_usage_once(self)
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = torch.nn.BatchNorm2d
         self._norm_layer = norm_layer
 
         self.inplanes = 64
@@ -209,7 +209,7 @@ class ResNet(nn.Module):
         for m in self.modules():
             if isinstance(m, qConv2d_layer):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+            elif isinstance(m, (torch.nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
